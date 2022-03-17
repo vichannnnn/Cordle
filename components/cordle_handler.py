@@ -27,6 +27,7 @@ async def check_word_validity(input: str):
         return False
     return True
 
+
 async def to_square(colour: int):
     valid = (0, 1, 2)
     if colour not in valid:
@@ -102,7 +103,8 @@ class User:
             self.five_words = 0
             return
 
-        five_words = await database_object.fetchrow('SELECT five_word_solved FROM user_profile WHERE user_id = $1 ', self.user_id)
+        five_words = await database_object.fetchrow('SELECT five_word_solved FROM user_profile WHERE user_id = $1 ',
+                                                    self.user_id)
         self.five_words = five_words[0]
 
     async def play_attempt(self, word: str) -> bool:
@@ -116,22 +118,26 @@ class User:
         # 1 = Right place, right letter
         # 2 = Wrong place, right letter
 
-        for n, letter in enumerate(answer):
+        # Cordle Logic
+        for n, letter in enumerate(answer):  # Iterate through the first time to snuff out all the right letters and positions.
             if guess[n] == letter:  # If they are in the right position and same letter
                 result.append(1)
-                answer_dict[letter] -= 1
+                answer_dict[letter] -= 1  # Reduce letter counter by one to track duplicate letter
                 continue
 
-            if guess[n] in answer_dict:
-                if answer_dict[guess[n]] > 0:
-                    answer_dict[guess[n]] -= 1
-                    result.append(2)
-                else:
-                    result.append(0)
-                continue
+            if guess[n] in answer_dict:  # If the letter exists, place a temporary mark on the position
+                result.append('TBD')
 
-            else:
+            else:  # If the letter does not even exist at all, mark as black
                 result.append(0)
+
+        for n, letter in enumerate(answer):  # Iterate the second time to find the right letter but wrong position letters
+            if result[n] == 'TBD':
+                if answer_dict[guess[n]] > 0:  # If there are duplicated same letter that still exists, mark as yellow
+                    answer_dict[letter] -= 1  # Reduce the counter correspondingly for even more duplicates
+                    result[n] = 2
+                else:
+                    result[n] = 0  # If there are no more duplicate same letter, then it is black now
 
         attempt = await self.check_today_attempt()
         attempt += 1
@@ -140,10 +146,12 @@ class User:
         victory_check = list(set(result))
         await database_object.execute(
             'INSERT INTO daily_five_profile (day_id, user_id, attempt, completed, result1, result2, result3, result4, result5, word_guessed) '
-            'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)', day_id, self.user_id, attempt, 1 if victory_check == [1] else 0, a, e, i, o, u, word)
+            'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)', day_id, self.user_id, attempt,
+            1 if victory_check == [1] else 0, a, e, i, o, u, word)
         if victory_check == [1]:
             self.five_words += 1
-            await database_object.execute('UPDATE user_profile SET five_word_solved = $1 WHERE user_id = $2 ', self.five_words, self.user_id)
+            await database_object.execute('UPDATE user_profile SET five_word_solved = $1 WHERE user_id = $2 ',
+                                          self.five_words, self.user_id)
         if victory_check == [1]:
             return "WIN"
         elif attempt == 6:
